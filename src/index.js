@@ -120,6 +120,7 @@ client.on("interactionCreate", async (interaction) => {
 
         player.play(resource);
 
+        
   }
 }
 }});
