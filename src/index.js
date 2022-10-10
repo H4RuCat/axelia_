@@ -1,6 +1,6 @@
  require('dotenv').config();
 
-const { Client, Intents, MessageEmbed, MessageActionRow, MessageButton, SlashCommandBuilder, ApplicationCommandDataResolvable } = require('discord.js');
+const { Client, Intents, MessageActionRow, MessageEmbed, MessageButton, SlashCommandBuilder, ApplicationCommandDataResolvable } = require('discord.js');
 const { joinVoiceChannel, createAudioPlayer, entersState, createAudioResource, StreamType, AudioPlayerStatus, VoiceConnectionStatus, NoSubscriberBehavior } = require('@discordjs/voice')
 
 const voice = require('@discordjs/voice');
@@ -12,9 +12,6 @@ const client = new Client({intents: [Intents.FLAGS.GUILDS, Intents.FLAGS.GUILD_M
 
 var queue = [];
 
-let queueCheck1 = 0
-let queueCheck2 = 1
-
 const player = createAudioPlayer({
   behaviors: {
     noSubscriber: NoSubscriberBehavior.Pause,
@@ -24,7 +21,7 @@ const player = createAudioPlayer({
 while(!queue > 0) {
   entersState(player, AudioPlayerStatus.Idle, 2 ** 31 - 1); {
 
-    const stream = ytdl(ytdl.getURLVideoID(queue[queueCheck2]), {
+    const stream = ytdl(ytdl.getURLVideoID(queue[0]), {
     
       filter: format => format.audioCodec === 'opus' && format.container === 'webm',
       quality: 'highest',
@@ -68,6 +65,9 @@ client.once('ready', async () => {
           required: true,
       }],
     },
+    { name: "join",
+      description: "ボイスチャンネルに接続します。",
+    },
     { name: "repeat",
       description: "再生中の音楽を繰り返します。",
       options: [{
@@ -99,16 +99,27 @@ client.once('ready', async () => {
 
 
 client.on("interactionCreate", async (interaction) => {
-  if (!interaction.isCommand()) {
+
+  const channel = interaction.member.voice.channel;
+
+  if(interaction.isButton()) {
+
+    if(interaction.customId === 'test') {
+      await interaction.reply({
+        content: "ボタンが押された",
+        ephemeral: true
+      })
+    }
+  }
+
+  if(!interaction.isCommand()) {
       return;
   }
-  if (interaction.commandName === 'play') {
-      
-      const channel = interaction.member.voice.channel;
+  if(interaction.commandName === 'play') {
 
-      if(!channel) return await interaction.reply('ボイスチャンネルに接続してください。');
+    if(!channel) return await interaction.reply('ボイスチャンネルに接続してください。');
 
-      if(channel) {
+    if(channel) {
 
          const url = interaction.options.getString('link-or-title')
 
@@ -130,17 +141,19 @@ client.on("interactionCreate", async (interaction) => {
             { name: '** **', value: '5: **' + videos[4].title + '**'}
             )
 
-             interaction.reply({ embeds: [ searchEmbed ] });
+              // ボタン
+
+             interaction.reply({ embeds: [ searchEmbed ] }); // ボタン出るようにしたい
 
           })
 
       } else if(ytdl.validateURL(url)) {
 
-        queue.push( interaction.guildId, url )
+        queue.push(url)
         console.log(queue)
 
           interaction.reply({
-            content: url + ' いれました'
+            content: url + ' 入れました' // urlのtitle取得したい
           })
 
       } else {
@@ -158,16 +171,12 @@ client.on("interactionCreate", async (interaction) => {
         selfDeaf: true,
        });
 
-      
       const subscription = connection.subscribe(player);
 
       subscription;
 
-      for (queueCheck1 = 0, queueCheck2 = 1 ; ytdl.validateURL(queue[queueCheck2]) && interaction.guildId == queue[queueCheck1]; queueCheck1 + 2 , queueCheck2 + 2) {
-
-        console.log(queueCheck1 + ' | ' + queueCheck2)
-
-        const stream = ytdl(ytdl.getURLVideoID(queue[queueCheck2]), {
+      while(queue.length == 1) {
+        const stream = ytdl(ytdl.getURLVideoID(queue[0]), {
 
           filter: format => format.audioCodec === 'opus' && format.container === 'webm',
           quality: 'highest',
@@ -179,45 +188,63 @@ client.on("interactionCreate", async (interaction) => {
         });
 
         player.play(resource);
-        
         return;
         }
-      }
-  } 
-  if (interaction.commandName === 'repeat') {
 
-    const repeatOption = interaction.options.getString('option')
-
-    if(repeatOption == 'single') {
+      if (interaction.commandName === 'repeat') {
       
-      repeatSwitch = 1
-      interaction.reply('再生中の音楽を繰り返します')
+        const repeatOption = interaction.options.getString('option')
+      
+        if(repeatOption == 'single') {
 
-    }
-    if (repeatOption == 'off') {
+          repeatSwitch = 1
+          interaction.reply('再生中の音楽を繰り返します')
+        
+        }
+        if (repeatOption == 'off') {
+        
+          repeatSwitch = 2
+          interaction.reply('音楽の繰り返しをOFFにしました')
+        
+        }
+        if (repeatOption == 'all') {
+        
+          repeatSwitch = 3
+          interaction.reply('キューの音楽を繰り返します')
+        
+        }
+      }
+      if (interaction.commandName === 'stop') {
+      
+        voice.getVoiceConnection(message.channel.guild.id).disconnect();
+      
+        interaction.reply('ボイスチャットから切断しました')
+      
+      }
+      if (interaction.commandName === 'join') {
 
-      repeatSwitch = 2
-      interaction.reply('音楽の繰り返しをOFFにしました')
+        if (channel) {
 
-    }
-    if (repeatOption == 'all') {
+          const connection = joinVoiceChannel({
+            channelId: channel.id,
+            guildId: channel.guild.id,
+            adapterCreator: channel.guild.voiceAdapterCreator,
+            selfMute: false,
+            selfDeaf: true,
+           });
 
-      repeatSwitch = 3
-      interaction.reply('キューの音楽を繰り返します')
+          connection.subscribe(player);
+          interaction.reply('ボイスチャンネルに接続しました。')
 
+        } 
+        if (!channel) {
+
+          interaction.reply('ボイスチャンネルに接続してください。')
+        }
+
+      }
     }
   }
-  if (interaction.commandName === 'stop') {
-
-    voice.getVoiceConnection(message.channel.guild.id).disconnect();
-
-    interaction.reply('ボイスチャットから切断しました')
-
-  }
-});
-
-client.on('messageCreate', async (message) => {
-
 });
 
 const token = process.env.TOKEN;
